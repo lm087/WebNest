@@ -102,14 +102,34 @@ class ManagerIntegrationTest {
                     }
                 }
             }
+            fun pullEdge(towardBottom: Boolean, name: String) {
+                // Send the entire held gesture without Compose's intermediate idle waits:
+                // native stretch keeps invalidating while the finger is down.
+                val bounds = list.fetchSemanticsNode().boundsInWindow
+                val downTime = android.os.SystemClock.uptimeMillis()
+                val startY = bounds.center.y
+                val endY = bounds.top + bounds.height * if (towardBottom) .85f else .15f
+                fun send(action: Int, y: Float) {
+                    android.view.MotionEvent.obtain(downTime, android.os.SystemClock.uptimeMillis(), action, bounds.center.x, y, 0).apply {
+                        source = android.view.InputDevice.SOURCE_TOUCHSCREEN
+                        try { instrumentation.sendPointerSync(this) } finally { recycle() }
+                    }
+                }
+                send(android.view.MotionEvent.ACTION_DOWN, startY)
+                try {
+                    repeat(12) { step ->
+                        Thread.sleep(25)
+                        send(android.view.MotionEvent.ACTION_MOVE, startY + (endY - startY) * (step + 1) / 12)
+                    }
+                    Thread.sleep(100)
+                    capture(name)
+                } finally { send(android.view.MotionEvent.ACTION_UP, endY) }
+                rule.waitForIdle()
+            }
             list.performScrollToIndex(0)
-            list.performTouchInput { down(center); moveTo(center.copy(y = height * .85f), delayMillis = 300) }
-            capture("long-list-top")
-            list.performTouchInput { up() }
+            pullEdge(true, "long-list-top")
             list.performScrollToNode(hasText(extra.last().name))
-            list.performTouchInput { down(center); moveTo(center.copy(y = height * .15f), delayMillis = 300) }
-            capture("long-list-bottom")
-            list.performTouchInput { up() }
+            pullEdge(false, "long-list-bottom")
             rule.onNodeWithText(extra.last().name).assertIsDisplayed().performTouchInput { swipeLeft() }
             rule.waitUntil(10000) { runBlocking { db.find(extra.last().id) == null } }
             rule.onNodeWithText("Undo").performClick()

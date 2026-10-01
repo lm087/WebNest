@@ -19,6 +19,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.lazy.items
@@ -168,6 +169,7 @@ class MainActivity : ComponentActivity() {
         val selectionActive by rememberUpdatedState(selecting)
         val exitSelection by rememberUpdatedState({ selectedIds = emptyList() })
         Scaffold(modifier = Modifier.pointerInput(Unit) { detectTapGestures(onTap = { if (selectionActive) exitSelection()})},
+            containerColor = MaterialTheme.colorScheme.surface,
             topBar = {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
                     TopAppBar(modifier = Modifier.widthIn(max = contentMaxWidth).fillMaxWidth(),
@@ -226,7 +228,7 @@ class MainActivity : ComponentActivity() {
                         Text("No Web Apps", style = MaterialTheme.typography.titleLarge)
                         Text("Add a URL or share one from your browser.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    else -> LazyColumn(Modifier.widthIn(max = contentMaxWidth).fillMaxSize(), state = listState, overscrollEffect = null, contentPadding = PaddingValues(vertical = 8.dp)) {
+                    else -> LazyColumn(Modifier.widthIn(max = contentMaxWidth).fillMaxSize().clipToBounds().background(MaterialTheme.colorScheme.surface), state = listState, contentPadding = PaddingValues(vertical = 8.dp)) {
                         items(ordered, key = { it.id }) { app ->
                             var menu by remember { mutableStateOf(false) }
                             val swipe = rememberSwipeToDismissBoxState(positionalThreshold = { it * .4f })
