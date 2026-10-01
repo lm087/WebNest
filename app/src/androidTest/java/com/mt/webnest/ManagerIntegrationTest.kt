@@ -61,16 +61,69 @@ class ManagerIntegrationTest {
         assertAbove(betaName, alphaName)
     }
 
-    @Test fun leftSwipeDeletesAndUndoRestoresOriginalDefinitionAndId() = manager { _, alpha, _ ->
-        rule.onNodeWithText(alphaName).performTouchInput { swipeLeft() }
-        rule.waitUntil(10000) { runBlocking { db.find(alpha.id) == null } }
-        rule.onNodeWithText("Undo").performClick()
-        rule.waitUntil(10000) { runBlocking { db.find(alpha.id) != null } }
+    @Test fun leftSwipeDeletesAndUndoRestoresOriginalDefinitionAndId() = manager { scenario, alpha, _ ->
+        repeat(3) { cycle ->
+            rule.onNodeWithText(alphaName).performTouchInput { swipeLeft() }
+            rule.waitUntil(10000) { runBlocking { db.find(alpha.id) == null } }
+            rule.onNodeWithText("Undo").performClick()
+            rule.waitUntil(10000) { rule.onAllNodesWithText(alphaName).fetchSemanticsNodes().isNotEmpty() }
+            // Allow the restored row's dismiss effect and asynchronous DB writes to run.
+            rule.mainClock.advanceTimeBy(1000)
+            rule.waitForIdle()
+            Thread.sleep(350)
+            assertNotNull("Undo immediately deleted the restored row (cycle $cycle)", runBlocking { db.find(alpha.id) })
+            rule.onNodeWithText("Undo").assertDoesNotExist()
+            if (cycle == 0) {
+                scenario.recreate()
+                rule.waitUntil(10000) { rule.onAllNodesWithText(alphaName).fetchSemanticsNodes().isNotEmpty() }
+            }
+        }
         val restored = runBlocking { db.find(alpha.id)!! }
         assertEquals(alpha.name, restored.name)
         assertEquals(alpha.modifiedAt, restored.modifiedAt)
         assertEquals(alpha.createdAt, restored.createdAt)
         assertEquals(alpha.url, restored.url)
+    }
+
+    @Test fun longListScrollsToBothEndsAndBottomSwipeUndoRemainsRestored() = manager { scenario, _, _ ->
+        val extra = runBlocking { (0 until 24).map { index ->
+            db.save(WebApp(name = "Scroll fixture %02d".format(index), url = "https://scroll.test/$index"))
+        } }
+        try {
+            scenario.recreate()
+            rule.waitUntil(10000) { rule.onAllNodesWithText(extra.last().name).fetchSemanticsNodes().isNotEmpty() }
+            sort("Name")
+            val list = rule.onNode(hasScrollToIndexAction())
+            fun capture(name: String) {
+                if (InstrumentationRegistry.getArguments().getString("captureScreenshots") == "true") {
+                    instrumentation.uiAutomation.takeScreenshot()?.let { image ->
+                        val directory = context.getExternalFilesDir("screenshots")!!.apply { mkdirs() }
+                        java.io.File(directory, "$name.png").outputStream().use { image.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                        image.recycle()
+                    }
+                }
+            }
+            list.performScrollToIndex(0)
+            list.performTouchInput { down(center); moveTo(center.copy(y = height * .85f), delayMillis = 300) }
+            capture("long-list-top")
+            list.performTouchInput { up() }
+            list.performScrollToNode(hasText(extra.last().name))
+            list.performTouchInput { down(center); moveTo(center.copy(y = height * .15f), delayMillis = 300) }
+            capture("long-list-bottom")
+            list.performTouchInput { up() }
+            rule.onNodeWithText(extra.last().name).assertIsDisplayed().performTouchInput { swipeLeft() }
+            rule.waitUntil(10000) { runBlocking { db.find(extra.last().id) == null } }
+            rule.onNodeWithText("Undo").performClick()
+            rule.waitUntil(10000) { rule.onAllNodesWithText(extra.last().name).fetchSemanticsNodes().isNotEmpty() }
+            rule.mainClock.advanceTimeBy(1000)
+            rule.waitForIdle()
+            Thread.sleep(350)
+            assertNotNull(runBlocking { db.find(extra.last().id) })
+            rule.onNodeWithText("Undo").assertDoesNotExist()
+        } finally {
+            runBlocking { db.deleteAll(extra.map { it.id }) }
+            extra.forEach { WebAppShortcutManager.remove(context, it.id) }
+        }
     }
 
     @Test fun longPressBatchDeletionUsesUndoAndRestoresEverySelectedId() = manager { scenario, alpha, beta ->

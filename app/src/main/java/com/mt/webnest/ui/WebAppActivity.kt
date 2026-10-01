@@ -32,6 +32,7 @@ import com.mt.webnest.data.WebApp
 import com.mt.webnest.notification.WebAppNotifications
 import com.mt.webnest.web.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 import java.util.WeakHashMap
 
 class WebAppActivity : ComponentActivity() {
@@ -149,13 +150,17 @@ class WebAppActivity : ComponentActivity() {
             }
             override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
                 permissions.cancelFor(view); uploads.cancelFor(view)
-                if (view === current) mainFrameFailed = false; errorPanel.visibility = View.GONE; loadingProgress.visibility = View.VISIBLE
+                if (view === current) {
+                    mainFrameFailed = false
+                    errorPanel.visibility = View.GONE
+                    loadingProgress.visibility = View.VISIBLE
+                }
             }
             override fun onPageFinished(view: WebView, url: String?) {
                 if (app?.desktopMode == true) view.evaluateJavascript("""(function(){let m=document.querySelector('meta[name="viewport"]');if(!m){m=document.createElement('meta');m.name='viewport';document.head.appendChild(m);}m.content='width=1024';})()""", null)
                 if (view === current) loadingProgress.visibility = View.GONE
                 if (view === webView && historyResetPending) { webView.clearHistory(); historyResetPending = false }
-                CookieManager.getInstance().flush()
+                lifecycleScope.launch(Dispatchers.IO) { CookieManager.getInstance().flush() }
             }
             override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) { if (request.isForMainFrame && view === current) showError("Couldn't load this page.")}
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
@@ -273,7 +278,10 @@ class WebAppActivity : ComponentActivity() {
         super.onResume()
         if (::webView.isInitialized) current.onResume()
         if (app != null) lifecycleScope.launch {
-            val updated = runCatching { AppDatabase.get(this@WebAppActivity).find(appId) }.getOrElse { return@launch }
+            val updated = runCatching {
+                val database = AppDatabase.get(this@WebAppActivity)
+                database.find(appId)?.also { database.markOpened(appId) }
+            }.getOrElse { return@launch }
             if (updated == null) closeWebApp()
             else {
                 val previous = app!!

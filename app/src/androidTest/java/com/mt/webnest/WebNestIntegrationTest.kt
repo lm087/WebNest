@@ -60,6 +60,25 @@ class WebNestIntegrationTest {
         }
     }
 
+    @Test fun returningToAnExistingWebAppUpdatesLastOpenedTime() = runBlocking<Unit> {
+        FixtureServer().use { server ->
+            val app = db.save(WebApp(name = "Resume history fixture", url = server.url + "/start"))
+            try {
+                ActivityScenario.launch<WebAppActivity>(WebAppActivity.intent(context, app.id)).use { scenario ->
+                    eventually { runBlocking { db.find(app.id)!!.lastOpenedAt != null } }
+                    val first = db.find(app.id)!!.lastOpenedAt!!
+                    scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+                    Thread.sleep(20)
+                    scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+                    eventually { runBlocking { db.find(app.id)!!.lastOpenedAt!! > first } }
+                }
+            } finally {
+                instrumentation.runOnMainSync { WebAppNotifications.close(context, app.id) }
+                db.delete(app.id)
+            }
+        }
+    }
+
     @Test fun documentNavigationReloadRestorationShortcutsAndNotificationClose() = runBlocking<Unit> {
         if (Build.VERSION.SDK_INT >= 33) {
             instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} android.permission.POST_NOTIFICATIONS").close()

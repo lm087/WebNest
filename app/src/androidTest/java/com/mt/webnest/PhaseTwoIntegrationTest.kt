@@ -66,6 +66,21 @@ class PhaseTwoIntegrationTest {
         scenario.onActivity { assertEquals(1, allWebs(it.window.decorView).size) }
     }
 
+    @Test fun hiddenPageNavigationCannotHideTheActivePopupError() = fixture { scenario, _, server ->
+        tapElement(scenario, "popup")
+        await { title(scenario) == "Sign in" }
+        scenario.onActivity { visibleWeb(it.window.decorView)!!.loadUrl("http://127.0.0.1:1/offline") }
+        fun assertError() = onView(withText("Couldn't load this page.")).check(
+            androidx.test.espresso.assertion.ViewAssertions.matches(androidx.test.espresso.matcher.ViewMatchers.isDisplayed()))
+        await { runCatching { assertError(); true }.getOrDefault(false) }
+        scenario.onActivity { activity ->
+            val popup = visibleWeb(activity.window.decorView)!!
+            val hidden = allWebs(activity.window.decorView).first { it !== popup }
+            hidden.webViewClient.onPageStarted(hidden, server.url, null)
+        }
+        assertError()
+    }
+
     @Test fun filePickerDeliversReadableFileToWebsite() = fixture { scenario, _, _ ->
         val result = Intent().setData(Uri.parse("content://com.mt.webnest.test.upload/file"))
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

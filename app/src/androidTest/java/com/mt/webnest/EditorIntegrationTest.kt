@@ -54,6 +54,17 @@ class EditorIntegrationTest {
         }
     }
 
+    @Test fun manyBrokenAdvertisedIconsStillFallBackToRootFavicon() = runBlocking<Unit> {
+        MetadataFixtureServer().use { server ->
+            val result = SiteMetadata.fetch(server.url + "/many-icons")
+            assertEquals("Many icons", result.name)
+            assertTrue(server.paths.contains("/favicon.ico"))
+            val image = bitmap(result.icon!!)
+            try { assertEquals(Color.RED, image.getPixel(0, 0)) }
+            finally { image.recycle() }
+        }
+    }
+
     @Test fun fetchKeepsExistingNameAndIcon() = editor { scenario, record, server ->
         rule.onNodeWithContentDescription("Fetch site details").performClick()
         fetched(server)

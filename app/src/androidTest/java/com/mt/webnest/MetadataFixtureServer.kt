@@ -36,6 +36,11 @@ internal class MetadataFixtureServer : AutoCloseable {
                 var type = "text/html; charset=utf-8"
                 var headers = ""
                 var body = when (path) {
+                    "/many-icons" -> ("<title>Many icons</title><link rel=manifest href=/many-icons.webmanifest>" +
+                        (0 until 6).joinToString("") { "<link rel=icon href=/missing-html-$it.png sizes=192x192>" }).toByteArray()
+                    "/many-icons.webmanifest" -> ("{\"icons\":[" + (0 until 6).joinToString(",") {
+                        "{\"src\":\"/missing-manifest-$it.png\",\"sizes\":\"512x512\"}"
+                    } + "]}").toByteArray()
                     "/pwa" -> "<title>HTML title</title><meta name=theme-color content=#000000><link rel='manifest' href='/assets/app.webmanifest'>".toByteArray()
                     "/assets/app.webmanifest" -> {
                         type = "application/manifest+json"

@@ -45,8 +45,6 @@ import com.mt.webnest.web.SitePermissions
 import com.mt.webnest.web.WebUrls
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 class MainActivity : ComponentActivity() {
     private var apps by mutableStateOf<List<WebApp>>(emptyList())
@@ -66,13 +64,13 @@ class MainActivity : ComponentActivity() {
             try { apps = AppDatabase.get(this@MainActivity).all() }
             catch (e: CancellationException) { throw e }
             catch (_: Exception) { error = true }
-            if (!error) withContext(Dispatchers.IO) { WebAppShortcutManager.refreshIconsIfNeeded(this@MainActivity, apps) }
+            if (!error) WebAppShortcutManager.refreshIconsIfNeeded(this@MainActivity, apps)
             loading = false
         }
     }
     private fun notify(message: String) { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
 
-    private fun delete(records: List<WebApp>, onFailure: () -> Unit = {}) {
+    private fun delete(records: List<WebApp>, onFailure: () -> Unit = {}, onDeleted: suspend () -> Unit = {}) {
         if (records.isEmpty() || working) { onFailure(); return }
         working = true
         lifecycleScope.launch {
@@ -83,7 +81,11 @@ class MainActivity : ComponentActivity() {
                     WebAppNotifications.close(this@MainActivity, it.id)
                     WebAppShortcutManager.remove(this@MainActivity, it.id)
                 }
-                apps = db.all()
+                val remaining = db.all()
+                // Clear dismissed state before LazyColumn saves/removes the row, so Undo
+                // with the original ID cannot restore a dismissed row and delete it again.
+                onDeleted()
+                apps = remaining
                 WebAppShortcutManager.sync(this@MainActivity, apps)
             } catch (e: CancellationException) { throw e }
             catch (_: Exception) { onFailure(); notify("Couldn't delete"); return@launch }
@@ -226,14 +228,15 @@ class MainActivity : ComponentActivity() {
                         Text("No Web Apps", style = MaterialTheme.typography.titleLarge)
                         Text("Add a URL or share one from your browser.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    else -> LazyColumn(Modifier.widthIn(max = contentMaxWidth).fillMaxSize(), state = listState, contentPadding = PaddingValues(vertical = 8.dp)) {
+                    else -> LazyColumn(Modifier.widthIn(max = contentMaxWidth).fillMaxSize(), state = listState, overscrollEffect = null, contentPadding = PaddingValues(vertical = 8.dp)) {
                         items(ordered, key = { it.id }) { app ->
                             var menu by remember { mutableStateOf(false) }
                             val swipe = rememberSwipeToDismissBoxState(positionalThreshold = { it * .4f })
                             val currentApp by rememberUpdatedState(app)
                             val onDismiss = remember(swipe) {{ direction: SwipeToDismissBoxValue ->
                                     if (direction == SwipeToDismissBoxValue.EndToStart) {
-                                        delete(listOf(currentApp), onFailure = { scope.launch { swipe.reset() }})
+                                        delete(listOf(currentApp), onFailure = { scope.launch { swipe.reset() }},
+                                            onDeleted = { swipe.snapTo(SwipeToDismissBoxValue.Settled) })
                                     } else if (direction == SwipeToDismissBoxValue.StartToEnd) scope.launch {
                                         try { togglePinned(currentApp)}
                                         catch (e: CancellationException) { throw e }
