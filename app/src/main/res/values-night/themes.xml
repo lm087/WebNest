@@ -1,0 +1,3 @@
+<resources>
+    <style name="Theme.WebNest" parent="android:Theme.Material.NoActionBar" />
+</resources>

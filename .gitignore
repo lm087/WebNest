@@ -1,0 +1,60 @@
+# Build output and caches
+build/
+.gradle/
+.kotlin/
+.externalNativeBuild/
+.cxx/
+/dist/
+/out/
+
+# Android packages
+*.apk
+*.apk.idsig
+*.aab
+*.apks
+
+# Local configuration and signing keys
+local.properties
+keystore.properties
+signing.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.key
+.env
+.env.*
+!.env.example
+
+# IDE settings
+.idea/
+.vscode/
+*.iml
+.navigation/
+
+# Local agent configuration
+DESIGN.md
+NOTICE.md
+PRODUCT.md
+.impeccable/
+.agents/
+.codex/
+
+# Captures and profiling output
+captures/
+screenshots/
+*.hprof
+*.trace
+*.perfetto-trace
+*.log
+docs/
+
+# Editor temporary files
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# macOS metadata
+.DS_Store
