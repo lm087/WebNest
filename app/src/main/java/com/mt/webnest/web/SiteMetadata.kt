@@ -87,7 +87,6 @@ object SiteMetadata {
         val rawName = manifest?.name ?: document.title
         val name = rawName?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().replace(Regex("\\s+"), " ").trim().take(100) }
         val fallbacks = listOf("/favicon.ico", "/apple-touch-icon.png", "/favicon.png").map { URI(finalUrl).resolve(it).toString()}
-        // Reserve room for standard fallbacks even when a site advertises many broken icons.
         val advertised = (manifest?.icons.orEmpty() + document.icons).distinct().take(7)
         val candidates = (advertised + fallbacks).distinct()
         val decoded = candidates.map { iconUrl -> async {

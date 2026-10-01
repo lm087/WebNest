@@ -82,8 +82,6 @@ class MainActivity : ComponentActivity() {
                     WebAppShortcutManager.remove(this@MainActivity, it.id)
                 }
                 val remaining = db.all()
-                // Clear dismissed state before LazyColumn saves/removes the row, so Undo
-                // with the original ID cannot restore a dismissed row and delete it again.
                 onDeleted()
                 apps = remaining
                 WebAppShortcutManager.sync(this@MainActivity, apps)

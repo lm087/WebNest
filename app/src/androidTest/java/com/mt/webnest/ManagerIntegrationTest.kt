@@ -66,8 +66,7 @@ class ManagerIntegrationTest {
             rule.onNodeWithText(alphaName).performTouchInput { swipeLeft() }
             rule.waitUntil(10000) { runBlocking { db.find(alpha.id) == null } }
             rule.onNodeWithText("Undo").performClick()
-            rule.waitUntil(10000) { rule.onAllNodesWithText(alphaName).fetchSemanticsNodes().isNotEmpty() }
-            // Allow the restored row's dismiss effect and asynchronous DB writes to run.
+            rule.waitUntil(10000) { rule.onAllNodesWithText(alphaName).fetchSemanticsNodes().isNotEmpty()}
             rule.mainClock.advanceTimeBy(1000)
             rule.waitForIdle()
             Thread.sleep(350)
