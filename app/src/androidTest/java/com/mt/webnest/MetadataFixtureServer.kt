@@ -11,66 +11,169 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.GZIPOutputStream
 import kotlin.concurrent.thread
 
-internal class MetadataFixtureServer : AutoCloseable {
+internal class MetadataFixtureServer(private val rootIconsOnly: Boolean = false) : AutoCloseable {
     private val server = ServerSocket(0)
     private val running = AtomicBoolean(true)
     val url = "http://127.0.0.1:${server.localPort}"
     val paths = CopyOnWriteArrayList<String>()
-    val icon = ByteArrayOutputStream().use { out ->
-        Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888).apply {
-            eraseColor(Color.BLUE); compress(Bitmap.CompressFormat.PNG, 100, out); recycle()
+    val icon =
+        ByteArrayOutputStream().use { out ->
+            Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888).apply {
+                eraseColor(Color.BLUE)
+                compress(Bitmap.CompressFormat.PNG, 100, out)
+                recycle()
+            }
+            out.toByteArray()
         }
-        out.toByteArray()
-    }
     val ico = dibIcon()
-    private val worker = thread(isDaemon = true) {
-        while (running.get()) runCatching {
-            server.accept().use { socket ->
-                socket.soTimeout = 2000
-                val reader = socket.getInputStream().bufferedReader()
-                val first = reader.readLine() ?: return@use
-                while (!reader.readLine().isNullOrEmpty()) { }
-                val path = first.split(' ')[1]
-                paths.add(path)
-                var status = "200 OK"
-                var type = "text/html; charset=utf-8"
-                var headers = ""
-                var body = when (path) {
-                    "/many-icons" -> ("<title>Many icons</title><link rel=manifest href=/many-icons.webmanifest>" +
-                        (0 until 6).joinToString("") { "<link rel=icon href=/missing-html-$it.png sizes=192x192>" }).toByteArray()
-                    "/many-icons.webmanifest" -> ("{\"icons\":[" + (0 until 6).joinToString(",") {
-                        "{\"src\":\"/missing-manifest-$it.png\",\"sizes\":\"512x512\"}"
-                    } + "]}").toByteArray()
-                    "/pwa" -> "<title>HTML title</title><meta name=theme-color content=#000000><link rel='manifest' href='/assets/app.webmanifest'>".toByteArray()
-                    "/assets/app.webmanifest" -> {
-                        type = "application/manifest+json"
-                        """{"theme_color":"#336699","name":"Long PWA Name","short_name":"PWA short","icons":[{"src":"missing.png","sizes":"512x512"},{"src":"icon.png","sizes":"192x192"}]}""".toByteArray()
+    private val worker =
+        thread(isDaemon = true) {
+            while (running.get()) runCatching {
+                server.accept().use { socket ->
+                    socket.soTimeout = 2000
+                    val reader = socket.getInputStream().bufferedReader()
+                    val first = reader.readLine() ?: return@use
+                    while (!reader.readLine().isNullOrEmpty()) {}
+                    val path = first.split(' ')[1]
+                    paths.add(path)
+                    var status = "200 OK"
+                    var type = "text/html; charset=utf-8"
+                    var headers = ""
+                    var body =
+                        when (path) {
+                            "/" ->
+                                "<title>Homepage</title><meta name=theme-color content=#ffffff><link rel=icon href=/assets/logo.svg>"
+                                    .toByteArray()
+                            "/article" ->
+                                "<title>Article title</title><meta name=theme-color content=#123456>"
+                                    .toByteArray()
+                            "/svg" ->
+                                "<title>SVG site</title><meta name=theme-color content=#654321><link rel=icon href=/assets/logo.svg>"
+                                    .toByteArray()
+                            "/assets/logo.svg" -> {
+                                type = "image/svg+xml"
+                                """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" fill="#0000ff"/></svg>"""
+                                    .toByteArray()
+                            }
+                            "/inline-svg" ->
+                                """<title>Inline icon</title><link rel=icon href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230000ff'/%3E%3C/svg%3E">"""
+                                    .toByteArray()
+                            "/broken-svg" ->
+                                "<title>Broken SVG</title><meta name=theme-color content=#abcdef><link rel=icon href=/invalid.svg>"
+                                    .toByteArray()
+                            "/invalid.svg" -> {
+                                type = "image/svg+xml"
+                                "not an svg".toByteArray()
+                            }
+                            "/many-icons" ->
+                                ("<title>Many icons</title><link rel=manifest href=/many-icons.webmanifest>" +
+                                        (0 until 6).joinToString("") {
+                                            "<link rel=icon href=/missing-html-$it.png sizes=192x192>"
+                                        })
+                                    .toByteArray()
+                            "/many-icons.webmanifest" ->
+                                ("{\"icons\":[" +
+                                        (0 until 6).joinToString(",") {
+                                            "{\"src\":\"/missing-manifest-$it.png\",\"sizes\":\"512x512\"}"
+                                        } +
+                                        "]}")
+                                    .toByteArray()
+                            "/pwa" ->
+                                "<title>HTML title</title><meta name=theme-color content=#000000><link rel='manifest' href='/assets/app.webmanifest'>"
+                                    .toByteArray()
+                            "/assets/app.webmanifest" -> {
+                                type = "application/manifest+json"
+                                """{"theme_color":"#336699","name":"Long PWA Name","short_name":"PWA short","icons":[{"src":"missing.png","sizes":"512x512"},{"src":"icon.png","sizes":"192x192"}]}"""
+                                    .toByteArray()
+                            }
+                            "/assets/icon.png" -> {
+                                type = "image/png"
+                                icon
+                            }
+                            "/fallback" ->
+                                "<title>Fallback &amp; title</title><meta name=theme-color content=#abcdef><link rel='manifest' href='/bad.webmanifest'>"
+                                    .toByteArray()
+                            "/bad.webmanifest" -> "not valid JSON".toByteArray()
+                            "/favicon.ico" -> {
+                                if (rootIconsOnly) {
+                                    status = "404 Not Found"
+                                    byteArrayOf()
+                                } else {
+                                    type = "image/x-icon"
+                                    ico
+                                }
+                            }
+                            else -> {
+                                status = "404 Not Found"
+                                byteArrayOf()
+                            }
+                        }
+                    if (path == "/pwa") {
+                        body =
+                            ByteArrayOutputStream().use { out ->
+                                GZIPOutputStream(out).use { it.write(body) }
+                                out.toByteArray()
+                            }
+                        headers = "Content-Encoding: gzip\r\n"
                     }
-                    "/assets/icon.png" -> { type = "image/png"; icon }
-                    "/fallback" -> "<title>Fallback &amp; title</title><meta name=theme-color content=#abcdef><link rel='manifest' href='/bad.webmanifest'>".toByteArray()
-                    "/bad.webmanifest" -> "not valid JSON".toByteArray()
-                    "/favicon.ico" -> { type = "image/x-icon"; ico }
-                    else -> { status = "404 Not Found"; byteArrayOf() }
+                    socket
+                        .getOutputStream()
+                        .write(
+                            "HTTP/1.1 $status\r\nContent-Type: $type\r\n${headers}Content-Length: ${body.size}\r\nConnection: close\r\n\r\n"
+                                .toByteArray() + body
+                        )
                 }
-                if (path == "/pwa") {
-                    body = ByteArrayOutputStream().use { out -> GZIPOutputStream(out).use { it.write(body) }; out.toByteArray() }
-                    headers = "Content-Encoding: gzip\r\n"
-                }
-                socket.getOutputStream().write("HTTP/1.1 $status\r\nContent-Type: $type\r\n${headers}Content-Length: ${body.size}\r\nConnection: close\r\n\r\n".toByteArray() + body)
             }
         }
+
+    override fun close() {
+        running.set(false)
+        server.close()
+        worker.join(1000)
     }
-    override fun close() { running.set(false); server.close(); worker.join(1000) }
 
     companion object {
-        fun dibIcon(): ByteArray = ByteBuffer.allocate(22 + 40 + 16 + 8).order(ByteOrder.LITTLE_ENDIAN).apply {
-            putShort(0); putShort(1); putShort(1)
-            put(2); put(2); put(0); put(0); putShort(1); putShort(24); putInt(64); putInt(22)
-            putInt(40); putInt(2); putInt(4); putShort(1); putShort(24); putInt(0); putInt(16)
-            putInt(0); putInt(0); putInt(0); putInt(0)
-            put(byteArrayOf(255.toByte(), 0, 0, 255.toByte(), 255.toByte(), 255.toByte(), 0, 0))
-            put(byteArrayOf(0, 0, 255.toByte(), 0, 255.toByte(), 0, 0, 0))
-            put(byteArrayOf(0x40, 0, 0, 0, 0, 0, 0, 0))
-        }.array()
+        fun dibIcon(): ByteArray =
+            ByteBuffer.allocate(22 + 40 + 16 + 8)
+                .order(ByteOrder.LITTLE_ENDIAN)
+                .apply {
+                    putShort(0)
+                    putShort(1)
+                    putShort(1)
+                    put(2)
+                    put(2)
+                    put(0)
+                    put(0)
+                    putShort(1)
+                    putShort(24)
+                    putInt(64)
+                    putInt(22)
+                    putInt(40)
+                    putInt(2)
+                    putInt(4)
+                    putShort(1)
+                    putShort(24)
+                    putInt(0)
+                    putInt(16)
+                    putInt(0)
+                    putInt(0)
+                    putInt(0)
+                    putInt(0)
+                    put(
+                        byteArrayOf(
+                            255.toByte(),
+                            0,
+                            0,
+                            255.toByte(),
+                            255.toByte(),
+                            255.toByte(),
+                            0,
+                            0,
+                        )
+                    )
+                    put(byteArrayOf(0, 0, 255.toByte(), 0, 255.toByte(), 0, 0, 0))
+                    put(byteArrayOf(0x40, 0, 0, 0, 0, 0, 0, 0))
+                }
+                .array()
     }
 }

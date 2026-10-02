@@ -20,7 +20,14 @@ fun SelectionMark(checked: Boolean, modifier: Modifier = Modifier) {
     val ink = MaterialTheme.colorScheme.onSurface
     val alpha by animateFloatAsState(if (checked) .10f else .03f, label = "Selection wash")
     Box(modifier, contentAlignment = Alignment.CenterStart) {
-        Canvas(Modifier.fillMaxHeight().width(80.dp)) { drawRect(Brush.horizontalGradient(listOf(ink.copy(alpha = alpha), Color.Transparent)))}
-        Icon(painterResource(R.drawable.ic_check), null, Modifier.padding(start = 16.dp).size(24.dp), tint = ink.copy(alpha = if (checked) 1f else .25f))
+        Canvas(Modifier.fillMaxHeight().width(80.dp)) {
+            drawRect(Brush.horizontalGradient(listOf(ink.copy(alpha = alpha), Color.Transparent)))
+        }
+        Icon(
+            painterResource(R.drawable.ic_check),
+            null,
+            Modifier.padding(start = 16.dp).size(24.dp),
+            tint = ink.copy(alpha = if (checked) 1f else .25f),
+        )
     }
 }
