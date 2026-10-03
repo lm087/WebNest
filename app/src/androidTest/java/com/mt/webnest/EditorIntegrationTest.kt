@@ -113,6 +113,45 @@ class EditorIntegrationTest {
         }
 
     @Test
+    fun enteringUrlFetchesAutomaticallyAndKeepsTypedName() = adding { scenario, server ->
+        rule.onNode(hasSetTextAction() and hasText("Name")).performTextInput("Personal")
+        rule.onNode(hasSetTextAction() and hasText("URL")).performTextInput(server.url + "/pwa")
+        fetched(server)
+        assertEquals(1, server.paths.count { it == "/pwa" })
+        rule.onNodeWithText("Personal").assertExists()
+        rule.onNodeWithText("Save").performClick()
+        saved(scenario)
+        val result = runBlocking { db.all().single { it.url == server.url + "/pwa" } }
+        assertEquals("Personal", result.name)
+        assertEquals(Color.BLUE, bitmap(result.icon!!).getPixel(0, 0))
+    }
+
+    @Test
+    fun savingImmediatelyAfterUrlEntryWaitsForSiteDetails() = adding { scenario, server ->
+        rule.onNode(hasSetTextAction() and hasText("URL")).performTextInput(server.url + "/pwa")
+        rule.onNodeWithText("Save").performClick()
+        saved(scenario)
+        val result = runBlocking { db.all().single { it.url == server.url + "/pwa" } }
+        assertEquals("PWA short", result.name)
+        assertEquals(0xff336699.toInt(), result.themeColor)
+        assertEquals(Color.BLUE, bitmap(result.icon!!).getPixel(0, 0))
+        assertEquals(1, server.paths.count { it == "/pwa" })
+    }
+
+    private fun adding(block: (ActivityScenario<AddWebAppActivity>, MetadataFixtureServer) -> Unit) {
+        MetadataFixtureServer().use { server ->
+            try {
+                ActivityScenario.launch<AddWebAppActivity>(Intent(context, AddWebAppActivity::class.java)).use { scenario ->
+                        rule.onNodeWithText("Add to home screen").performClick()
+                        block(scenario, server)
+                    }
+            } finally {
+                runBlocking { db.all().filter { it.url.startsWith(server.url)}.forEach { db.delete(it.id)}}
+            }
+        }
+    }
+
+    @Test
     fun fetchKeepsExistingNameAndIcon() = editor { scenario, record, server ->
         rule.onNodeWithContentDescription("Fetch site details").performClick()
         fetched(server)

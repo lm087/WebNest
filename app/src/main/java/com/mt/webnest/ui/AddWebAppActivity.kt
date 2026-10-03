@@ -82,6 +82,7 @@ class AddWebAppActivity : ComponentActivity() {
         var urlError by remember { mutableStateOf(false) }
         var fetchJob by remember { mutableStateOf<Job?>(null) }
         var fetchGeneration by remember { mutableIntStateOf(0) }
+        var lastFetchUrl by remember { mutableStateOf<String?>(null) }
         val scope = rememberCoroutineScope()
         val density = LocalDensity.current
         var nameFieldHeight by remember { mutableIntStateOf(0) }
@@ -93,14 +94,15 @@ class AddWebAppActivity : ComponentActivity() {
                             MaterialTheme.typography.bodySmall.lineHeight.toDp() / 2)
                         .coerceAtLeast(48.dp) + 1.dp
             }
-        fun fetch() {
+        fun fetch(normalizeInput: Boolean = true) {
             val target = WebUrls.normalize(url)
             if (target == null) {
                 urlError = true
                 notify("Enter an http or https URL")
                 return
             }
-            url = target
+            if (normalizeInput) url = target
+            lastFetchUrl = target
             urlError = false
             fetchJob?.cancel()
             val generation = ++fetchGeneration
@@ -184,8 +186,17 @@ class AddWebAppActivity : ComponentActivity() {
                     notify("Couldn't load Web App")
                 }
                 loading = false
-            } else if (sharedUrl != null && !initialized) fetch()
+            }
             initialized = true
+        }
+        LaunchedEffect(url, initialized, saving) {
+            if (editId == 0L && initialized && !saving) {
+                val target = WebUrls.normalize(url)
+                if (target != null && target != lastFetchUrl) {
+                    delay(700)
+                    if (target != lastFetchUrl) fetch(normalizeInput = false)
+                }
+            }
         }
         Scaffold(
             topBar = {
@@ -281,6 +292,7 @@ class AddWebAppActivity : ComponentActivity() {
                                     ++fetchGeneration
                                     fetching = false
                                     url = it
+                                    lastFetchUrl = null
                                     themeColor = null
                                     urlError = false
                                 },
@@ -388,9 +400,12 @@ class AddWebAppActivity : ComponentActivity() {
                                         notify("Use a single-line ASCII user agent")
                                     } else {
                                         saving = true
-                                        fetchJob?.cancel()
                                         lifecycleScope.launch {
                                             try {
+                                                if (editId == 0L) {
+                                                    if (lastFetchUrl != target) fetch(normalizeInput = false)
+                                                    fetchJob?.join()
+                                                } else fetchJob?.cancel()
                                                 val db = AppDatabase.get(this@AddWebAppActivity)
                                                 val record =
                                                     db.save(
